@@ -71,12 +71,12 @@ def chechIsTagName(s):
         if not(s[i].isalpha() or s[i].isdigit() or s[i] == "-" or s[i] == "_" or s[i] == "."):
             raise ValueError("Tagname can only contain letters, digits, hyphens, underscores and periods " + s)
 
-def parseAttributes(s):
+def parseAttributes(s, start_iter_i):
     """
     attribuutti="arvo" attribuutti2="arvo2">
     """
     attributes = {}
-    i = 0
+    i = start_iter_i
     while s[i] != ">":
         start_i = i
         while s[i] != "=":
@@ -109,50 +109,81 @@ def parseAttributes(s):
 
         attributes[name] = value
 
-    return attributes
+    return attributes, i + 1
 
+class StartTag:
+    def __init__(self, tagname = None, attributes = {}):
+        self.tagname = tagname
+        self.attributes = attributes
 
-def parseStartTag(s):
-    """
-    starttag name and attributes as dictionary
-    raises:
-        errors if not properly formed
-    Returns (tagname, attributes: {name: value})
-    """
-    if s[0] != "<":
-        raise ValueError("missing <")
-    if s[-1] != ">":
-        raise ValueError("missing >")
+class EndTag:
+    def __init__(self, tagname = None):
+        self.tagname = tagname
         
-    attributes = {}
 
-    parts = s.split(" ", maxsplit=1)  
-    if len(parts) == 1: #no attributes, > at the end
-        tagname = parts[0][1:-1]
-    else:
-        tagname = parts[0][1:]
+def parseStartTag(s, start_i):
+    """
+    Params:
+        s string to search
+        start_i index to start
+    raises:
+        errors if not properly formed starttag
+    Returns (tagname, attributes: {name: value}, end_index + 1)
+    """
+    if s[start_i] != "<":
+        raise ValueError("missing <")
 
-        attributes = parseAttributes(parts[1])
+    i = start_i + 1
+    while i < len(s) and s[i] not in [" ", ">"]:
+        i += 1
 
-    chechIsTagName(tagname)
+    tag = StartTag()
+
+    tag.tagname = s[start_i+1:i]
+
+    if i >= len(s):
+        raise ValueError("missing >")
+    #has attributes
+    if s[i] == " ":
+        attributes, i = parseAttributes(s, i+1)
+        tag.attributes = attributes
+
+        chechIsTagName(tag.tagname)
+        return tag, i
+
+    chechIsTagName(tag.tagname)
+    return tag, i+1
 
 
-    return tagname,attributes 
 
-
-def parseEndTag(s):
+def parseEndTag(s, start_i):
     """
     tagname
     """
-
-    if not s.startswith("</"):
+    if not s[start_i:].startswith("</"):
         raise ValueError("missing </")
-    if s[-1] != ">":
+
+    i = start_i
+    while i < len(s) and s[i] != ">":
+        i += 1
+        
+    if i >= len(s):
         raise ValueError("missing >")
 
-    chechIsTagName(s[2:-1])
+    tag = EndTag()
+    tag.tagname = s[start_i+2:i]
 
-    return s[2:-1]
+    chechIsTagName(tag.tagname)
+
+    return tag, i+1
+
+def parseText(s, start_i):
+    i = start_i
+    while i < len(s) and s[i] != "<":
+        i += 1
+
+    return s[start_i:i], i
+
 
 
 class Node:
@@ -169,39 +200,49 @@ class Node:
 
         return f"<{self.tagname} {attr}>{self.text}{cds}</{self.tagname}>"
 
-def parseNode(xml):
-    """
-    Returns:
-        (tagname: str, attributes: dict, between_tags: str, after_tag: str)
-    """
-    s = xml.strip()
-    if s[0] != "<":
-        raise ValueError("missing <")
 
-    i = 0
-    while s[i] != ">":
-        i += 1
-    i+=1
-    tagname, attributes = parseStartTag(s[0:i])
+def parse(xml, start_i, elementit):
+    if start_i >= len(xml):
+        return
 
-    #start index of endtag
-    end_i = s.find("</" + tagname + ">", i)
-    #index of > of this tag
-    tag_end_i = end_i + len(tagname) + 3
-    endtag = parseEndTag(s[end_i:(tag_end_i)])
+    try:
+        e, i = parseStartTag(xml, start_i)
+        elementit.append(e)
+        parse(xml, i, elementit)
+        return
+    except:
+        pass
 
-    between_tags = s[i:end_i]
-    after_tags = s[tag_end_i:]
+    try:
+        e, i = parseEndTag(xml, start_i)
+        elementit.append(e)
+        parse(xml, i, elementit)
+        return
+    except:
+        pass
 
-    return (tagname, attributes, between_tags, after_tags)
+    try:
+        e, i = parseText(xml, start_i)
+        elementit.append(e)
+        parse(xml, i, elementit)
+        return
+    except:
+        pass
+
+    raise ValueError("can't parse ", xml)
 
 
 xml = """
-    <elementti attribuutti="arvo" attribuutti2="arvo2">
-        <alielementti>Tekstiä</alielementti>
+    <elementti attribuutti="arvo" attribuutti2="arvo2">Tekstiä1
         <alielementti>Tekstiä2</alielementti>
+        <alielementti>Tekstiä3</alielementti>
     </elementti>
     """
+
+elementit = []
+parse(xml, 0, elementit)
+print(elementit)
+
 
 def main():
     parser = argparse.ArgumentParser("xml parser")
