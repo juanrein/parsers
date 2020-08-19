@@ -177,12 +177,19 @@ def parseEndTag(s, start_i):
 
     return tag, i+1
 
+class TextNode:
+    def __init__(self, text = None):
+        self.text = text
+
+    def __str__(self):
+        return self.text
+        
 def parseText(s, start_i):
     i = start_i
     while i < len(s) and s[i] != "<":
         i += 1
 
-    return s[start_i:i], i
+    return TextNode(s[start_i:i]), i
 
 
 
@@ -191,46 +198,121 @@ class Node:
         self.tagname = ""
         self.childNodes = []
         self.attributes = {}
-        self.text = ""
 
     def __str__(self):
         attr = " ".join(map(lambda x: x[0] + '="' + x[1] + '"', self.attributes.items()))
         
         cds =  "".join(map(str, self.childNodes))
 
-        return f"<{self.tagname} {attr}>{self.text}{cds}</{self.tagname}>"
+        if len(attr) > 0:
+            return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
+        return f"<{self.tagname}>{cds}</{self.tagname}>"
 
 
-def parse(xml, start_i, elementit):
+def parse(xml, start_i, elements):
+    """
+    Parses xml string to starttags, endtags and text nodes
+    """
     if start_i >= len(xml):
         return
 
     try:
         e, i = parseStartTag(xml, start_i)
-        elementit.append(e)
-        parse(xml, i, elementit)
+        elements.append(e)
+        parse(xml, i, elements)
         return
     except:
         pass
 
     try:
         e, i = parseEndTag(xml, start_i)
-        elementit.append(e)
-        parse(xml, i, elementit)
+        elements.append(e)
+        parse(xml, i, elements)
         return
     except:
         pass
 
     try:
         e, i = parseText(xml, start_i)
-        elementit.append(e)
-        parse(xml, i, elementit)
+        elements.append(e)
+        parse(xml, i, elements)
         return
     except:
         pass
 
     raise ValueError("can't parse ", xml)
 
+
+
+
+def findEnd(elements, start_i):
+    """
+    index of endtag for elements[start_i]
+    """
+    end_i = start_i + 1
+    while end_i < len(elements):
+        if isinstance(elements[end_i], EndTag) and elements[end_i].tagname == elements[start_i].tagname:
+            break
+        end_i += 1
+
+    if end_i >= len(elements):
+        raise ValueError("missing endtag for", elements[start_i])
+
+    return end_i
+
+
+def parseXML(xml):
+    elements = []
+    parse(xml, 0, elements)
+    
+    #skip anything before root node
+    start_i = 0
+    while start_i < len(elements) and not isinstance(elements[start_i], StartTag):
+        start_i += 1
+
+    end_i = findEnd(elements, start_i)
+
+    root = Node()
+    root.tagname = elements[start_i].tagname
+    root.attributes = elements[start_i].attributes
+    
+    children = parse_node(elements, start_i+1, end_i-1)
+    root.childNodes = children
+
+    return root
+
+
+
+def parse_node(elements, start_i, end_i):
+    """
+         start_i    end_i
+    <tag>................</tag>
+    """
+    nodes = []
+
+    i = start_i
+    while i <= end_i:
+        if isinstance(elements[i], TextNode):
+            nodes.append(elements[i])
+            i += 1
+        elif isinstance(elements[i], StartTag):
+            end_j = findEnd(elements, i)
+            n = Node()
+            n.tagname = elements[i].tagname
+            n.attributes = elements[i].attributes
+
+            children = parse_node(elements, i+1, end_j-1)
+            n.childNodes = children
+
+            nodes.append(n)
+
+            i = end_j+1
+        elif isinstance(elements[i], EndTag):
+            i += 1
+        else:
+            raise ValueError("unknown element", elements[i])
+
+    return nodes
 
 xml = """
     <elementti attribuutti="arvo" attribuutti2="arvo2">Tekstiä1
@@ -239,10 +321,7 @@ xml = """
     </elementti>
     """
 
-elementit = []
-parse(xml, 0, elementit)
-print(elementit)
-
+print(parseXML(xml))
 
 def main():
     parser = argparse.ArgumentParser("xml parser")
