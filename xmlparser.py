@@ -18,6 +18,7 @@ comment:
 
 White-space is Preserved in XML
 
+TODO: self closing tag
 
 """
 
@@ -49,8 +50,8 @@ class StartTag:
         self.tagname = tagname
         self.attributes = attributes
 
-    @classmethod
-    def parseAttributes(cls, s, start_iter_i):
+    @staticmethod
+    def parseAttributes(s, start_iter_i):
         """
         attribuutti="arvo" attribuutti2="arvo2">
         XML Attribute Values Must Always be Quoted
@@ -97,8 +98,8 @@ class StartTag:
 
         return attributes, i + 1
 
-    @classmethod
-    def parse(cls, s, start_i):
+    @staticmethod
+    def parse(s, start_i):
         """
         Params:
             s string to search
@@ -135,8 +136,8 @@ class EndTag:
     def __init__(self, tagname = None):
         self.tagname = tagname
     
-    @classmethod
-    def parse(cls, s, start_i):
+    @staticmethod
+    def parse(s, start_i):
         """
         tagname
         """
@@ -197,8 +198,8 @@ class Prolog:
     def __str__(self):
         return f'<?xml version="{self.version}" encoding="{self.encoding}"?>'
 
-    @classmethod
-    def parse(cls, s, start_i):
+    @staticmethod
+    def parse(s, start_i):
         """
         012345
         <?xml version="1.0" encoding="UTF-8"?>
@@ -229,8 +230,8 @@ class TextNode:
     def __str__(self):
         return self.text
         
-    @classmethod
-    def parse(cls, s, start_i):
+    @staticmethod
+    def parse(s, start_i):
         i = start_i
         while i < len(s) and s[i] != "<":
             i += 1
@@ -274,8 +275,8 @@ class Node:
             return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
         return f"<{self.tagname}>{cds}</{self.tagname}>"
 
-    @classmethod
-    def parse(cls, elements, start_i, end_i):
+    @staticmethod
+    def parse(elements, start_i, end_i):
         """
             start_i    end_i
         <tag>................</tag>
@@ -353,29 +354,38 @@ class XMLDocument:
             return f"{self.prolog}\n{self.root}"
         return str(self.root)
 
-def parseXML(xml):
-    elements = []
-    tokenize(xml, 0, elements)
-            
-    #skip anything before root node
-    start_i = 0
-    while start_i < len(elements) and not isinstance(elements[start_i], StartTag):
-        start_i += 1
+    @staticmethod
+    def parse(xml):
+        elements = []
+        tokenize(xml, 0, elements)
+                
+        #skip anything before root node
+        start_i = 0
+        while start_i < len(elements) and not isinstance(elements[start_i], StartTag):
+            start_i += 1
 
-    end_i = findEnd(elements, start_i)
+        end_i = findEnd(elements, start_i)
 
-    root = Node()
-    root.tagname = elements[start_i].tagname
-    root.attributes = elements[start_i].attributes
-    
-    children = Node.parse(elements, start_i+1, end_i-1)
-    root.childNodes = children
+        root = Node()
+        root.tagname = elements[start_i].tagname
+        root.attributes = elements[start_i].attributes
+        
+        children = Node.parse(elements, start_i+1, end_i-1)
+        root.childNodes = children
 
-    doc = XMLDocument(root)
-    if isinstance(elements[0], Prolog):
-        doc.prolog = elements[0]
-    return doc
+        doc = XMLDocument(root)
+        if isinstance(elements[0], Prolog):
+            doc.prolog = elements[0]
+        return doc
 
+
+    @staticmethod
+    def parseFile(file):
+        doc = None
+        with open(file) as f:
+            data = f.read()
+            doc = XMLDocument.parse(data)
+        return doc
 
 
 def main():
@@ -384,10 +394,8 @@ def main():
 
     args = parser.parse_args()
 
-    with open(args.file) as f:
-        data = f.read()
-        root = parseXML(data)
-        print(root)
+    print(XMLDocument.parseFile(args.file))
 
+    
 if __name__ == "__main__":
     main()

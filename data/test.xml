@@ -1,0 +1,12 @@
+<test class="method">
+    <element></element>
+    <element type="ranking"  name="unknown">
+        <first id="1">12</first>
+        <second id="2">34
+            <list>
+                <object>11100000</object>
+                <object>00011111</object>
+            </list>    
+        </second>
+    </element>
+</test>
