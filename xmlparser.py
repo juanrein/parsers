@@ -1,9 +1,8 @@
 import argparse
+import re 
+
+
 """
-
-This line is called the XML prolog: <?xml version="1.0" encoding="UTF-8"?>
-The XML prolog is optional. If it exists, it must come first in the document.
-
 entity references:
     &lt;	<	less than
     &gt;	>	greater than
@@ -19,34 +18,6 @@ comment:
 
 White-space is Preserved in XML
 
-Element:
-    XML documents must contain one root element that is the parent of all other elements
-
-    Element names must start with a letter or underscore
-    Element names cannot start with the letters xml (or XML, or Xml, etc)
-    Element names can contain letters, digits, hyphens, underscores, and periods
-    Element names cannot contain spaces
-
-    All XML Elements Must Have a Closing Tag
-
-    XML tags are case sensitive. The tag <Letter> is different from the tag <letter>.
-    Opening and closing tags must be written with the same case
-
-    An element with no content is said to be empty.
-    <element></element>
-    You can also use a so called self-closing tag:
-    <element />
-
-    element can have text content and child nodes
-
-Atributes:
-    XML Attribute Values Must Always be Quoted
-    Either single or double quotes can be used.
-
-    If the attribute value itself contains double quotes you can use single quotes, like in this example:
-    <gangster name='George "Shotgun" Ziegler'>
-    or you can use character entities:
-    <gangster name="George &quot;Shotgun&quot; Ziegler">
 
 """
 
@@ -71,111 +42,185 @@ def chechIsTagName(s):
         if not(s[i].isalpha() or s[i].isdigit() or s[i] == "-" or s[i] == "_" or s[i] == "."):
             raise ValueError("Tagname can only contain letters, digits, hyphens, underscores and periods " + s)
 
-def parseAttributes(s, start_iter_i):
-    """
-    attribuutti="arvo" attribuutti2="arvo2">
-    """
-    attributes = {}
-    i = start_iter_i
-    while s[i] != ">":
-        start_i = i
-        while s[i] != "=":
-            i += 1
-        name = s[start_i:i]
-        #pass whitespace
-        while s[i] == " ":
-            i += 1
-        i += 1 #pass '='
-        #pass whitespace
-        while s[i] == " ":
-            i += 1
 
-        if s[i] == "'":
-            quoteChar = "'"
-        else:
-            quoteChar = '"'
-        
-        #pass quotechar
-        i += 1
-        start_i = i
-        while s[i] != quoteChar:
-            i += 1
-        value = s[start_i:i]
-        #pass quotechar
-        i += 1
-        #pass whitespace
-        while s[i] == " ":
-            i += 1
-
-        attributes[name] = value
-
-    return attributes, i + 1
 
 class StartTag:
     def __init__(self, tagname = None, attributes = {}):
         self.tagname = tagname
         self.attributes = attributes
 
+    @classmethod
+    def parseAttributes(cls, s, start_iter_i):
+        """
+        attribuutti="arvo" attribuutti2="arvo2">
+        XML Attribute Values Must Always be Quoted
+        Either single or double quotes can be used.
+
+        If the attribute value itself contains double quotes you can use single quotes, like in this example:
+        <gangster name='George "Shotgun" Ziegler'>
+        or you can use character entities:
+        <gangster name="George &quot;Shotgun&quot; Ziegler">
+        """
+        attributes = {}
+        i = start_iter_i
+        while s[i] != ">":
+            start_i = i
+            while s[i] != "=":
+                i += 1
+            name = s[start_i:i]
+            #pass whitespace
+            while s[i] == " ":
+                i += 1
+            i += 1 #pass '='
+            #pass whitespace
+            while s[i] == " ":
+                i += 1
+
+            if s[i] == "'":
+                quoteChar = "'"
+            else:
+                quoteChar = '"'
+            
+            #pass quotechar
+            i += 1
+            start_i = i
+            while s[i] != quoteChar:
+                i += 1
+            value = s[start_i:i]
+            #pass quotechar
+            i += 1
+            #pass whitespace
+            while s[i] == " ":
+                i += 1
+
+            attributes[name] = value
+
+        return attributes, i + 1
+
+    @classmethod
+    def parse(cls, s, start_i):
+        """
+        Params:
+            s string to search
+            start_i index to start
+        raises:
+            errors if not properly formed starttag
+        Returns (tagname, attributes: {name: value}, end_index + 1)
+        """
+        if s[start_i] != "<":
+            raise ValueError("missing <")
+
+        i = start_i + 1
+        while i < len(s) and s[i] not in [" ", ">"]:
+            i += 1
+
+        tag = StartTag()
+
+        tag.tagname = s[start_i+1:i]
+
+        if i >= len(s):
+            raise ValueError("missing >")
+        #has attributes
+        if s[i] == " ":
+            attributes, i = StartTag.parseAttributes(s, i+1)
+            tag.attributes = attributes
+
+            chechIsTagName(tag.tagname)
+            return tag, i
+
+        chechIsTagName(tag.tagname)
+        return tag, i+1
+
 class EndTag:
     def __init__(self, tagname = None):
         self.tagname = tagname
-        
+    
+    @classmethod
+    def parse(cls, s, start_i):
+        """
+        tagname
+        """
+        if not s[start_i:].startswith("</"):
+            raise ValueError("missing </")
 
-def parseStartTag(s, start_i):
-    """
-    Params:
-        s string to search
-        start_i index to start
-    raises:
-        errors if not properly formed starttag
-    Returns (tagname, attributes: {name: value}, end_index + 1)
-    """
-    if s[start_i] != "<":
-        raise ValueError("missing <")
+        i = start_i
+        while i < len(s) and s[i] != ">":
+            i += 1
+            
+        if i >= len(s):
+            raise ValueError("missing >")
 
-    i = start_i + 1
-    while i < len(s) and s[i] not in [" ", ">"]:
-        i += 1
-
-    tag = StartTag()
-
-    tag.tagname = s[start_i+1:i]
-
-    if i >= len(s):
-        raise ValueError("missing >")
-    #has attributes
-    if s[i] == " ":
-        attributes, i = parseAttributes(s, i+1)
-        tag.attributes = attributes
+        tag = EndTag()
+        tag.tagname = s[start_i+2:i]
 
         chechIsTagName(tag.tagname)
-        return tag, i
 
-    chechIsTagName(tag.tagname)
-    return tag, i+1
+        return tag, i+1
 
-
-
-def parseEndTag(s, start_i):
+def parseKV(s, start_i, end_i, k):
     """
-    tagname
+    Parse value from string like
+    key="value"
+    Params:
+        s: string from to search
+        start_i: index to start the search
+        end_i: index to stop the search
+        k: the key to search
+    Returns:
+        value
     """
-    if not s[start_i:].startswith("</"):
-        raise ValueError("missing </")
+    i = s.find(k, start_i, end_i)
+    if i == -1:
+        raise ValueError(k + " not found")
 
-    i = start_i
-    while i < len(s) and s[i] != ">":
-        i += 1
+    i += len(k) + 1
+    if s[i] == '"':
+        seperator = '"'
+    elif s[i] == "'":
+        seperator = "'"
+    else:
+        raise ValueError("missing '")  
+    j = i+1
+    while j < len(s) and s[j] != seperator:
+        j += 1
+    return s[i+1:j]
+
+class Prolog:
+    """
+    This line is called the XML prolog: <?xml version="1.0" encoding="UTF-8"?>
+    The XML prolog is optional. If it exists, it must come first in the document.
+    """
+    def __init__(self, version="1.0", encoding="UTF-8"):
+        self.version = version
+        self.encoding = encoding
+
+    def __str__(self):
+        return f'<?xml version="{self.version}" encoding="{self.encoding}"?>'
+
+    @classmethod
+    def parse(cls, s, start_i):
+        """
+        012345
+        <?xml version="1.0" encoding="UTF-8"?>
+        """
+        if not s[start_i:].startswith("<?xml"):
+            raise ValueError("missing <?xml")
         
-    if i >= len(s):
-        raise ValueError("missing >")
+        end_i = s.find("?>", start_i+5)
+        if end_i == -1:
+            raise ValueError("missing ?>")
 
-    tag = EndTag()
-    tag.tagname = s[start_i+2:i]
+        prolog = Prolog()
+        try:
+            prolog.version = parseKV(s, start_i, end_i, "version")
+        except:
+            pass
+        try:
+            prolog.encoding = parseKV(s, start_i, end_i, "encoding")
+        except:
+            pass
+        return prolog, end_i+2
 
-    chechIsTagName(tag.tagname)
-
-    return tag, i+1
 
 class TextNode:
     def __init__(self, text = None):
@@ -184,16 +229,37 @@ class TextNode:
     def __str__(self):
         return self.text
         
-def parseText(s, start_i):
-    i = start_i
-    while i < len(s) and s[i] != "<":
-        i += 1
+    @classmethod
+    def parse(cls, s, start_i):
+        i = start_i
+        while i < len(s) and s[i] != "<":
+            i += 1
 
-    return TextNode(s[start_i:i]), i
+        return TextNode(s[start_i:i]), i
 
 
 
 class Node:
+    """
+    XML documents must contain one root element that is the parent of all other elements
+
+    Element names must start with a letter or underscore
+    Element names cannot start with the letters xml (or XML, or Xml, etc)
+    Element names can contain letters, digits, hyphens, underscores, and periods
+    Element names cannot contain spaces
+
+    All XML Elements Must Have a Closing Tag
+
+    XML tags are case sensitive. The tag <Letter> is different from the tag <letter>.
+    Opening and closing tags must be written with the same case
+
+    An element with no content is said to be empty.
+    <element></element>
+    You can also use a so called self-closing tag:
+    <element />
+
+    element can have text content and child nodes
+    """
     def __init__(self):
         self.tagname = ""
         self.childNodes = []
@@ -208,40 +274,57 @@ class Node:
             return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
         return f"<{self.tagname}>{cds}</{self.tagname}>"
 
+    @classmethod
+    def parse(cls, elements, start_i, end_i):
+        """
+            start_i    end_i
+        <tag>................</tag>
+        """
+        nodes = []
 
-def parse(xml, start_i, elements):
+        i = start_i
+        while i <= end_i:
+            if isinstance(elements[i], TextNode):
+                nodes.append(elements[i])
+                i += 1
+            elif isinstance(elements[i], StartTag):
+                end_j = findEnd(elements, i)
+                n = Node()
+                n.tagname = elements[i].tagname
+                n.attributes = elements[i].attributes
+
+                children = Node.parse(elements, i+1, end_j-1)
+                n.childNodes = children
+
+                nodes.append(n)
+
+                i = end_j+1
+            elif isinstance(elements[i], EndTag):
+                i += 1
+            else:
+                raise ValueError("unknown element", elements[i])
+
+        return nodes
+
+
+def tokenize(xml, start_i, elements):
     """
-    Parses xml string to starttags, endtags and text nodes
+    Parses xml string to starttags, endtags and text nodes, prologs
     """
     if start_i >= len(xml):
         return
 
-    try:
-        e, i = parseStartTag(xml, start_i)
-        elements.append(e)
-        parse(xml, i, elements)
-        return
-    except:
-        pass
-
-    try:
-        e, i = parseEndTag(xml, start_i)
-        elements.append(e)
-        parse(xml, i, elements)
-        return
-    except:
-        pass
-
-    try:
-        e, i = parseText(xml, start_i)
-        elements.append(e)
-        parse(xml, i, elements)
-        return
-    except:
-        pass
-
+    fs = [Prolog.parse, StartTag.parse, EndTag.parse, TextNode.parse]
+    for f in fs:
+        try:
+            e, i = f(xml, start_i)
+            elements.append(e)
+            tokenize(xml, i, elements)
+            return
+        except:
+            pass
+    
     raise ValueError("can't parse ", xml)
-
 
 
 
@@ -260,11 +343,20 @@ def findEnd(elements, start_i):
 
     return end_i
 
+class XMLDocument:
+    def __init__(self, root, prolog = None):
+        self.root = root
+        self.prolog = prolog
+
+    def __str__(self):
+        if self.prolog:
+            return f"{self.prolog}\n{self.root}"
+        return str(self.root)
 
 def parseXML(xml):
     elements = []
-    parse(xml, 0, elements)
-    
+    tokenize(xml, 0, elements)
+            
     #skip anything before root node
     start_i = 0
     while start_i < len(elements) and not isinstance(elements[start_i], StartTag):
@@ -276,52 +368,15 @@ def parseXML(xml):
     root.tagname = elements[start_i].tagname
     root.attributes = elements[start_i].attributes
     
-    children = parse_node(elements, start_i+1, end_i-1)
+    children = Node.parse(elements, start_i+1, end_i-1)
     root.childNodes = children
 
-    return root
+    doc = XMLDocument(root)
+    if isinstance(elements[0], Prolog):
+        doc.prolog = elements[0]
+    return doc
 
 
-
-def parse_node(elements, start_i, end_i):
-    """
-         start_i    end_i
-    <tag>................</tag>
-    """
-    nodes = []
-
-    i = start_i
-    while i <= end_i:
-        if isinstance(elements[i], TextNode):
-            nodes.append(elements[i])
-            i += 1
-        elif isinstance(elements[i], StartTag):
-            end_j = findEnd(elements, i)
-            n = Node()
-            n.tagname = elements[i].tagname
-            n.attributes = elements[i].attributes
-
-            children = parse_node(elements, i+1, end_j-1)
-            n.childNodes = children
-
-            nodes.append(n)
-
-            i = end_j+1
-        elif isinstance(elements[i], EndTag):
-            i += 1
-        else:
-            raise ValueError("unknown element", elements[i])
-
-    return nodes
-
-xml = """
-    <elementti attribuutti="arvo" attribuutti2="arvo2">Tekstiä1
-        <alielementti>Tekstiä2</alielementti>
-        <alielementti>Tekstiä3</alielementti>
-    </elementti>
-    """
-
-print(parseXML(xml))
 
 def main():
     parser = argparse.ArgumentParser("xml parser")
@@ -330,6 +385,9 @@ def main():
     args = parser.parse_args()
 
     with open(args.file) as f:
-        print(f.read)
+        data = f.read()
+        root = parseXML(data)
+        print(root)
 
-
+if __name__ == "__main__":
+    main()
