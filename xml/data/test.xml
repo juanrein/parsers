@@ -8,5 +8,6 @@
                 <object>00011111</object>
             </list>    
         </second>
+        <third attr="value" />
     </element>
 </test>

@@ -3,6 +3,7 @@ import re
 
 
 """
+TODO:
 entity references:
     &lt;	<	less than
     &gt;	>	greater than
@@ -15,11 +16,6 @@ comment:
 
     Two dashes in the middle of a comment are not allowed:
     <!-- This is an invalid -- comment -->
-
-White-space is Preserved in XML
-
-TODO: self closing tag
-
 """
 
 
@@ -43,12 +39,81 @@ def chechIsTagName(s):
         if not(s[i].isalpha() or s[i].isdigit() or s[i] == "-" or s[i] == "_" or s[i] == "."):
             raise ValueError("Tagname can only contain letters, digits, hyphens, underscores and periods " + s)
 
+class SelfClosingTag:
+    """
+    <element />
+    self closing tag
+    Empty elements can have attributes.
+    """
+    def __init__(self, tagname = None, attributes = None):
+        if attributes is None:
+            self.attributes = {}
+        else:
+            self.attributes = attributes
+    
+        self.tagname = tagname
+
+    @staticmethod
+    def parse(s, start_i):
+        """
+        <element />
+        <element attr="value" />
+        Params:
+            s string to search
+            start_i index to start
+        raises:
+            errors if not properly formed
+        Returns (SelfClosingTag, end_index + 1)
+        """
+        if s[start_i] != "<":
+            raise ValueError("missing <")
+
+        tag = SelfClosingTag()
+
+        stack = []
+        attr = ""
+        for i in range(start_i+1, len(s)):
+            if s[i] + s[i+1] == "/>":
+                chechIsTagName(tag.tagname)
+                return tag, i+2
+            if s[i] == ">":
+                raise ValueError("missing />")
+            elif s[i] == "=":
+                attr = "".join(stack)
+                stack = []
+            elif s[i] == " ":
+                if not tag.tagname:
+                    tag.tagname = "".join(stack)
+                    stack = []
+            elif s[i] == "'":
+                if "'" in stack:
+                    val = "".join(stack[1:])
+                    tag.attributes[attr] = val
+                    stack = []
+                else:
+                    stack.append(s[i])                    
+            elif s[i] == '"':
+                if '"' in stack:
+                    val = "".join(stack[1:])
+                    tag.attributes[attr] = val
+                    stack = []
+                else:
+                    stack.append(s[i])
+            else:
+                stack.append(s[i])          
+
+        if i+1 >= len(s):
+            raise ValueError("missing />")
+
 
 
 class StartTag:
-    def __init__(self, tagname = None, attributes = {}):
+    def __init__(self, tagname = None, attributes = None):
+        if attributes is None:
+            self.attributes = {}
+        else:
+            self.attributes = attributes
         self.tagname = tagname
-        self.attributes = attributes
 
     @staticmethod
     def parseAttributes(s, start_iter_i):
@@ -59,22 +124,20 @@ class StartTag:
 
         If the attribute value itself contains double quotes you can use single quotes, like in this example:
         <gangster name='George "Shotgun" Ziegler'>
-        or you can use character entities:
-        <gangster name="George &quot;Shotgun&quot; Ziegler">
         """
         attributes = {}
         i = start_iter_i
         while s[i] != ">":
             start_i = i
-            while s[i] != "=":
+            while i < len(s) and s[i] != "=":
                 i += 1
             name = s[start_i:i]
             #pass whitespace
-            while s[i] == " ":
+            while i < len(s) and s[i] == " ":
                 i += 1
             i += 1 #pass '='
             #pass whitespace
-            while s[i] == " ":
+            while i < len(s) and s[i] == " ":
                 i += 1
 
             if s[i] == "'":
@@ -85,13 +148,13 @@ class StartTag:
             #pass quotechar
             i += 1
             start_i = i
-            while s[i] != quoteChar:
+            while i < len(s) and s[i] != quoteChar:
                 i += 1
             value = s[start_i:i]
             #pass quotechar
             i += 1
             #pass whitespace
-            while s[i] == " ":
+            while i < len(s) and s[i] == " ":
                 i += 1
 
             attributes[name] = value
@@ -106,7 +169,7 @@ class StartTag:
             start_i index to start
         raises:
             errors if not properly formed starttag
-        Returns (tagname, attributes: {name: value}, end_index + 1)
+        Returns (StartTag, end_index + 1)
         """
         if s[start_i] != "<":
             raise ValueError("missing <")
@@ -261,7 +324,8 @@ class Node:
 
     element can have text content and child nodes
     """
-    def __init__(self):
+    def __init__(self, selfClosing = False):
+        self.selfClosing = selfClosing
         self.tagname = ""
         self.childNodes = []
         self.attributes = {}
@@ -271,9 +335,14 @@ class Node:
         
         cds =  "".join(map(str, self.childNodes))
 
-        if len(attr) > 0:
-            return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
-        return f"<{self.tagname}>{cds}</{self.tagname}>"
+        if self.selfClosing:
+            if len(attr) > 0:
+                return f"<{self.tagname} {attr} />"
+            return f"<{self.tagname} />"
+        else:
+            if len(attr) > 0:
+                return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
+            return f"<{self.tagname}>{cds}</{self.tagname}>"
 
     @staticmethod
     def parse(elements, start_i, end_i):
@@ -300,6 +369,12 @@ class Node:
                 nodes.append(n)
 
                 i = end_j+1
+            elif isinstance(elements[i], SelfClosingTag):
+                n = Node(True)
+                n.tagname = elements[i].tagname
+                n.attributes = elements[i].attributes
+                nodes.append(n)
+                i += 1
             elif isinstance(elements[i], EndTag):
                 i += 1
             else:
@@ -315,7 +390,7 @@ def tokenize(xml, start_i, elements):
     if start_i >= len(xml):
         return
 
-    fs = [Prolog.parse, StartTag.parse, EndTag.parse, TextNode.parse]
+    fs = [Prolog.parse, SelfClosingTag.parse, StartTag.parse, EndTag.parse, TextNode.parse]
     for f in fs:
         try:
             e, i = f(xml, start_i)
@@ -340,7 +415,7 @@ def findEnd(elements, start_i):
         end_i += 1
 
     if end_i >= len(elements):
-        raise ValueError("missing endtag for", elements[start_i])
+        raise ValueError("missing endtag")
 
     return end_i
 
