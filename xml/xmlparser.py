@@ -1,6 +1,6 @@
 import argparse
 import re 
-
+from elements import StartTag, EndTag, SelfClosingTag, TextNode, Prolog, Node
 
 """
 TODO:
@@ -18,141 +18,43 @@ comment:
     <!-- This is an invalid -- comment -->
 """
 
-class SelfClosingTag:
+
+def parse_node(elements, start_i, end_i):
     """
-    <element />
-    self closing tag
-    Empty elements can have attributes.
+         start_i    end_i
+    <tag>................</tag>
     """
-    def __init__(self, tagname = None, attributes = None):
-        if attributes is None:
-            self.attributes = {}
+    nodes = []
+
+    i = start_i
+    while i <= end_i:
+        if isinstance(elements[i], TextNode):
+            nodes.append(elements[i])
+            i += 1
+        elif isinstance(elements[i], StartTag):
+            end_j = findEnd(elements, i)
+            n = Node()
+            n.tagname = elements[i].tagname
+            n.attributes = elements[i].attributes
+
+            children = parse_node(elements, i+1, end_j-1)
+            n.childNodes = children
+
+            nodes.append(n)
+
+            i = end_j+1
+        elif isinstance(elements[i], SelfClosingTag):
+            n = Node(True)
+            n.tagname = elements[i].tagname
+            n.attributes = elements[i].attributes
+            nodes.append(n)
+            i += 1
+        elif isinstance(elements[i], EndTag):
+            i += 1
         else:
-            self.attributes = attributes
-    
-        self.tagname = tagname
+            raise ValueError("unknown element", elements[i])
 
-
-class StartTag:
-    def __init__(self, tagname = None, attributes = None):
-        if attributes is None:
-            self.attributes = {}
-        else:
-            self.attributes = attributes
-        self.tagname = tagname
-
-
-class EndTag:
-    def __init__(self, tagname = None):
-        self.tagname = tagname
-    
-
-class Prolog:
-    """
-    This line is called the XML prolog: <?xml version="1.0" encoding="UTF-8"?>
-    The XML prolog is optional. If it exists, it must come first in the document.
-    """
-    def __init__(self, version="1.0", encoding="UTF-8"):
-        if version is None:
-            self.version = "1.0"
-        else:
-            self.version = version
-        if encoding is None:
-            self.encoding = "UTF-8"
-        else:
-            self.encoding = encoding
-
-    def __str__(self):
-        return f'<?xml version="{self.version}" encoding="{self.encoding}"?>'
-
-
-
-class TextNode:
-    def __init__(self, text = None):
-        self.text = text
-
-    def __str__(self):
-        return self.text
-
-
-class Node:
-    """
-    XML documents must contain one root element that is the parent of all other elements
-
-    Element names must start with a letter or underscore
-    Element names cannot start with the letters xml (or XML, or Xml, etc)
-    Element names can contain letters, digits, hyphens, underscores, and periods
-    Element names cannot contain spaces
-
-    All XML Elements Must Have a Closing Tag
-
-    XML tags are case sensitive. The tag <Letter> is different from the tag <letter>.
-    Opening and closing tags must be written with the same case
-
-    An element with no content is said to be empty.
-    <element></element>
-    You can also use a so called self-closing tag:
-    <element />
-
-    element can have text content and child nodes
-    """
-    def __init__(self, selfClosing = False):
-        self.selfClosing = selfClosing
-        self.tagname = ""
-        self.childNodes = []
-        self.attributes = {}
-
-    def __str__(self):
-        attr = " ".join(map(lambda x: x[0] + '="' + x[1] + '"', self.attributes.items()))
-        
-        cds =  "".join(map(str, self.childNodes))
-
-        if self.selfClosing:
-            if len(attr) > 0:
-                return f"<{self.tagname} {attr} />"
-            return f"<{self.tagname} />"
-        else:
-            if len(attr) > 0:
-                return f"<{self.tagname} {attr}>{cds}</{self.tagname}>"
-            return f"<{self.tagname}>{cds}</{self.tagname}>"
-
-    @staticmethod
-    def parse(elements, start_i, end_i):
-        """
-            start_i    end_i
-        <tag>................</tag>
-        """
-        nodes = []
-
-        i = start_i
-        while i <= end_i:
-            if isinstance(elements[i], TextNode):
-                nodes.append(elements[i])
-                i += 1
-            elif isinstance(elements[i], StartTag):
-                end_j = findEnd(elements, i)
-                n = Node()
-                n.tagname = elements[i].tagname
-                n.attributes = elements[i].attributes
-
-                children = Node.parse(elements, i+1, end_j-1)
-                n.childNodes = children
-
-                nodes.append(n)
-
-                i = end_j+1
-            elif isinstance(elements[i], SelfClosingTag):
-                n = Node(True)
-                n.tagname = elements[i].tagname
-                n.attributes = elements[i].attributes
-                nodes.append(n)
-                i += 1
-            elif isinstance(elements[i], EndTag):
-                i += 1
-            else:
-                raise ValueError("unknown element", elements[i])
-
-        return nodes
+    return nodes
 
 def isValidTagName(s):
     """
@@ -223,8 +125,8 @@ def parse_endtag(s):
         return None
     tag = m.group("tag")
 
-    """ if not isValidTagName(tag):
-        return None """
+    if not isValidTagName(tag):
+        return None
 
     endtag = EndTag(tag)
     return endtag, m.end()
@@ -270,6 +172,15 @@ def parse_fail(s):
     raise ValueError("unknown token at: " + s)
 
 def tokenize(s):
+    """
+    xml string to list of StartTag, EndTag, SelfClosingTag, TextNode
+    Params:
+        s: str xml string
+    Returns:
+        List of elements
+    Raises:
+        ValueError: if not properly formed xml
+    """
     tokens = []
     i = 0
     fs = [parse_prolog, parse_starttag, parse_selfclosing, parse_endtag, parse_text, parse_fail]
@@ -325,7 +236,7 @@ class XMLDocument:
         root.tagname = tokens[start_i].tagname
         root.attributes = tokens[start_i].attributes
         
-        children = Node.parse(tokens, start_i+1, end_i-1)
+        children = parse_node(tokens, start_i+1, end_i-1)
         root.childNodes = children
 
         doc = XMLDocument(root)

@@ -1,9 +1,8 @@
 import unittest
-from xmlparser import parse_prolog, parse_starttag,parse_selfclosing,parse_endtag,parse_text,Prolog, StartTag, EndTag, SelfClosingTag, TextNode, isValidTagName
-
+from xmlparser import parse_prolog, parse_starttag,parse_selfclosing,parse_endtag,parse_text, isValidTagName
+from elements import Prolog, StartTag, EndTag, SelfClosingTag, TextNode
 """
 py -m unittest tests.py
-
 """
 class Testit(unittest.TestCase):
     def testParseProlog(self):
